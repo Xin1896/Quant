@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的博客</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #f7f7f7; margin: 0; padding: 0; }
+        .container { max-width: 700px; margin: 40px auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 32px 24px; }
+        h1 { text-align: center; color: #222; margin-bottom: 8px; }
+        .desc { text-align: center; color: #666; margin-bottom: 32px; }
+        .post { margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid #eee; }
+        .post:last-child { border-bottom: none; }
+        .post-title { font-size: 1.3em; color: #0077cc; margin: 0 0 8px 0; }
+        .post-date { color: #aaa; font-size: 0.95em; margin-bottom: 8px; }
+        .post-summary { color: #444; }
+        .footer { text-align: center; color: #888; margin-top: 40px; font-size: 0.98em; }
+        a { color: #0077cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>我的博客</h1>
+        <div class="desc">记录思考、技术与生活</div>
+
+        <!-- 新增：提交新文章表单 -->
+        <form id="blogForm" style="margin-bottom:32px; background:#f2f8fc; padding:16px 12px; border-radius:8px;">
+            <div style="margin-bottom:8px;">
+                <input type="text" id="title" placeholder="文章标题" required style="width:100%;padding:8px;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:8px;">
+                <input type="date" id="date" required style="width:100%;padding:8px;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:8px;">
+                <textarea id="summary" placeholder="文章摘要" required style="width:100%;padding:8px;box-sizing:border-box;resize:vertical;"></textarea>
+            </div>
+            <button type="submit" style="width:100%;padding:10px;background:#0077cc;color:#fff;border:none;border-radius:4px;font-size:1em;cursor:pointer;">提交新文章</button>
+        </form>
+
+        <div id="posts">
+            <div class="post">
+                <div class="post-title">如何高效学习编程？</div>
+                <div class="post-date">2024-06-01</div>
+                <div class="post-summary">分享一些实用的编程学习方法和经验，帮助你少走弯路，快速成长为一名优秀的开发者。</div>
+            </div>
+            <div class="post">
+                <div class="post-title">Pine Script量化策略入门</div>
+                <div class="post-date">2024-05-28</div>
+                <div class="post-summary">带你快速了解TradingView Pine Script的基础语法和常见用法，助你实现自己的量化交易策略。</div>
+            </div>
+            <div class="post">
+                <div class="post-title">生活中的小确幸</div>
+                <div class="post-date">2024-05-20</div>
+                <div class="post-summary">记录生活中那些温暖的小瞬间，让忙碌的日子多一些美好和感动。</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            联系方式：<a href="mailto:your@email.com">your@email.com</a> | &copy; 2024 我的博客
+        </div>
+    </div>
+    <script>
+    // 提交新文章功能（仅前端，刷新页面会丢失）
+    document.getElementById('blogForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var title = document.getElementById('title').value.trim();
+        var date = document.getElementById('date').value;
+        var summary = document.getElementById('summary').value.trim();
+        if(!title || !date || !summary) return;
+        var postDiv = document.createElement('div');
+        postDiv.className = 'post';
+        postDiv.innerHTML = '<div class="post-title">' + title + '</div>' +
+                            '<div class="post-date">' + date + '</div>' +
+                            '<div class="post-summary">' + summary + '</div>';
+        var posts = document.getElementById('posts');
+        posts.insertBefore(postDiv, posts.firstChild);
+        this.reset();
+    });
+    </script>
+</body>
+</html> 

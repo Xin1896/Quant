@@ -1,0 +1,478 @@
+//@version=5
+strategy("Al Brooks Bitcoin 4H Major Reversal Prediction", shorttitle="AB_BTC_4H", overlay=true, initial_capital=50000, default_qty_type=strategy.percent_of_equity, default_qty_value=2, commission_type=strategy.commission.percent, commission_value=0.075, slippage=2, calc_on_every_tick=false, calc_on_order_fills=false)
+
+// =============================================================================
+// INPUT PARAMETERS - Al Brooks Price Action Settings
+// =============================================================================
+
+// EMA Settings Group
+ema_group = "════════ EMA Settings ════════"
+ema_length = input.int(20, "EMA Period", minval=5, maxval=50, group=ema_group, tooltip="Al Brooks uses 20-period EMA as trend filter")
+show_higher_tf_ema = input.bool(true, "Show Higher Timeframe EMA", group=ema_group)
+daily_ema_length = input.int(20, "Daily EMA Period", minval=10, maxval=50, group=ema_group)
+weekly_ema_length = input.int(20, "Weekly EMA Period", minval=10, maxval=50, group=ema_group)
+
+// Pattern Detection Group
+pattern_group = "════════ Pattern Detection ════════"
+enable_inside_bars = input.bool(true, "Inside Bars (i, ii, iii)", group=pattern_group)
+enable_reversal_bars = input.bool(true, "Reversal Bars", group=pattern_group, tooltip="Al Brooks reversal bar criteria")
+enable_signal_bars = input.bool(true, "Signal Bars", group=pattern_group, tooltip="Strong trend bars with good closes")
+enable_wedges = input.bool(true, "Three-Push Wedges", group=pattern_group)
+enable_double_patterns = input.bool(true, "Double Tops/Bottoms", group=pattern_group)
+min_body_percent = input.float(60.0, "Min Signal Bar Body %", minval=40.0, maxval=90.0, step=5.0, group=pattern_group)
+pattern_sensitivity = input.float(1.0, "Pattern Sensitivity", minval=0.5, maxval=2.0, step=0.1, group=pattern_group)
+
+// Bitcoin Specific Adaptations
+btc_group = "════════ Bitcoin Adaptations ════════"
+use_volatility_filter = input.bool(true, "Volatility Filter", group=btc_group, tooltip="Filter high volatility periods")
+use_session_bias = input.bool(true, "Session Bias", group=btc_group, tooltip="US session bullish bias")
+atr_stop_multiplier = input.float(2.5, "ATR Stop Multiplier", minval=1.0, maxval=5.0, step=0.1, group=btc_group)
+show_round_levels = input.bool(true, "Show Round Number Levels", group=btc_group)
+volume_confirmation = input.bool(true, "Volume Confirmation", group=btc_group, tooltip="Require volume expansion for signals")
+
+// Risk Management Group
+risk_group = "════════ Risk Management ════════"
+use_time_exits = input.bool(true, "Time-Based Exits", group=risk_group)
+max_bars_in_trade = input.int(6, "Max Bars in Trade", minval=3, maxval=20, group=risk_group, tooltip="24 hours = 6 bars on 4H")
+profit_target_atr = input.float(3.0, "Profit Target (ATR)", minval=1.5, maxval=5.0, step=0.5, group=risk_group)
+max_risk_percent = input.float(2.0, "Max Risk %", minval=0.5, maxval=5.0, step=0.1, group=risk_group)
+
+// Alert Settings
+alert_group = "════════ Alert Settings ════════"
+enable_alerts = input.bool(false, "Enable Alerts", group=alert_group)
+min_score_alert = input.int(6, "Min Score for Alert", minval=3, maxval=10, group=alert_group)
+alert_only_major = input.bool(true, "Only Major Reversal Alerts", group=alert_group)
+
+// Visual Settings
+visual_group = "════════ Visual Settings ════════"
+show_pattern_labels = input.bool(true, "Pattern Labels", group=visual_group)
+show_score_table = input.bool(true, "Score Table", group=visual_group)
+show_statistics = input.bool(true, "Statistics Panel", group=visual_group)
+bull_color = input.color(#00ff88, "Bull Color", group=visual_group)
+bear_color = input.color(#ff4444, "Bear Color", group=visual_group)
+neutral_color = input.color(#ffaa00, "Neutral Color", group=visual_group)
+
+// =============================================================================
+// CORE CALCULATIONS AND VARIABLES
+// =============================================================================
+
+// Basic OHLC and bar structure
+body_size = math.abs(close - open)
+total_range = high - low
+real_body = close - open
+body_high = math.max(open, close)
+body_low = math.min(open, close)
+upper_wick = high - body_high
+lower_wick = body_low - low
+
+// Percentages for Al Brooks analysis
+body_percent = total_range > 0 ? (body_size / total_range) * 100 : 0
+upper_wick_percent = total_range > 0 ? (upper_wick / total_range) * 100 : 0
+lower_wick_percent = total_range > 0 ? (lower_wick / total_range) * 100 : 0
+
+// ATR and volatility
+atr_period = 14
+atr_value = ta.atr(atr_period)
+avg_true_range_5 = ta.sma(total_range, 5)
+is_large_range_bar = total_range > avg_true_range_5 * 1.3
+volatility_percentile = ta.percentrank(atr_value, 50)
+
+// Moving averages
+ema20 = ta.ema(close, ema_length)
+daily_ema = request.security(syminfo.tickerid, "1D", ta.ema(close, daily_ema_length), lookahead=barmerge.lookahead_off)
+weekly_ema = request.security(syminfo.tickerid, "1W", ta.ema(close, weekly_ema_length), lookahead=barmerge.lookahead_off)
+
+// EMA relationships
+above_ema = close > ema20
+below_ema = close < ema20
+first_bar_above = above_ema and not above_ema[1]
+first_bar_below = below_ema and not below_ema[1]
+
+// Gap bars (Al Brooks concept)
+gap_above_ema = low > ema20 and low[1] <= ema20[1]
+gap_below_ema = high < ema20 and high[1] >= ema20[1]
+
+// Two-legged pullback detection
+pullback_high = ta.pivothigh(2, 2)
+pullback_low = ta.pivotlow(2, 2)
+near_ema_threshold = atr_value * 0.5
+pullback_to_ema_bull = pullback_low and math.abs(low[2] - ema20[2]) <= near_ema_threshold and above_ema
+pullback_to_ema_bear = pullback_high and math.abs(high[2] - ema20[2]) <= near_ema_threshold and below_ema
+
+// =============================================================================
+// SESSION AND TIME ANALYSIS (Bitcoin 24/7)
+// =============================================================================
+
+// Get current GMT hour
+current_hour = hour(time("GMT"))
+
+// Define sessions
+asian_session = current_hour >= 23 or current_hour < 7
+european_session = current_hour >= 7 and current_hour < 15
+us_session = current_hour >= 13 and current_hour < 21
+overlap_session = current_hour >= 13 and current_hour < 16
+
+// Session multipliers based on historical BTC performance
+var float session_mult = 1.0
+if use_session_bias
+    session_mult := us_session ? 1.15 : european_session ? 1.05 : asian_session ? 0.9 : 1.0
+
+// Volatility filter
+high_volatility = volatility_percentile > 85
+low_volatility = volatility_percentile < 15
+normal_volatility = not high_volatility and not low_volatility
+
+// =============================================================================
+// AL BROOKS CANDLESTICK PATTERN DETECTION
+// =============================================================================
+
+// Inside Bar Detection (i, ii, iii sequence)
+var int inside_bar_count = 0
+inside_bar = high <= high[1] and low >= low[1] and enable_inside_bars
+if inside_bar
+    inside_bar_count := inside_bar[1] ? inside_bar_count[1] + 1 : 1
+else
+    inside_bar_count := 0
+double_inside = inside_bar_count >= 2
+triple_inside = inside_bar_count >= 3
+
+// Outside Bar Detection
+outside_bar = high > high[1] and low < low[1]
+
+// Doji Detection
+doji_threshold = total_range * 0.05
+is_doji = body_size <= doji_threshold and total_range > avg_true_range_5 * 0.8
+
+// Signal Bar Detection (Al Brooks criteria)
+bull_signal_bar = close > open and body_percent >= min_body_percent and upper_wick_percent <= 25 and lower_wick_percent <= 15 and is_large_range_bar and enable_signal_bars
+bear_signal_bar = close < open and body_percent >= min_body_percent and lower_wick_percent <= 25 and upper_wick_percent <= 15 and is_large_range_bar and enable_signal_bars
+
+// Reversal Bar Detection (Al Brooks specific criteria)
+bull_reversal_bar = enable_reversal_bars and (
+    open <= close[1] * 1.002 and
+    close > open and close > close[1] and
+    lower_wick_percent >= 30 and lower_wick_percent <= 60 and
+    upper_wick_percent <= 20 and
+    body_percent >= 35 and
+    is_large_range_bar
+)
+bear_reversal_bar = enable_reversal_bars and (
+    open >= close[1] * 0.998 and
+    close < open and close < close[1] and
+    upper_wick_percent >= 30 and upper_wick_percent <= 60 and
+    lower_wick_percent <= 20 and
+    body_percent >= 35 and
+    is_large_range_bar
+)
+
+// Shaved bars (strong momentum)
+shaved_top = math.abs(close - high) <= total_range * 0.05
+shaved_bottom = math.abs(close - low) <= total_range * 0.05
+bull_shaved = shaved_top and close > open
+bear_shaved = shaved_bottom and close < open
+
+// =============================================================================
+// MAJOR REVERSAL PATTERN IDENTIFICATION
+// =============================================================================
+
+// Three-Push Wedge Pattern Variables
+var float wedge_point1 = na
+var float wedge_point2 = na
+var float wedge_point3 = na
+var int wedge_time1 = na
+var int wedge_time2 = na
+var int wedge_time3 = na
+var bool wedge_bull = false
+var bool wedge_bear = false
+
+// Rising Wedge Detection (Bearish reversal)
+if enable_wedges and ta.pivothigh(3, 3)
+    pivot_high = high[3]
+    if na(wedge_point1) or pivot_high > wedge_point1
+        wedge_point1 := pivot_high
+        wedge_time1 := bar_index - 3
+        wedge_point2 := na
+        wedge_point3 := na
+        wedge_bear := false
+    else if not na(wedge_point1) and na(wedge_point2) and pivot_high > wedge_point1 * 0.99
+        wedge_point2 := pivot_high
+        wedge_time2 := bar_index - 3
+        wedge_point3 := na
+        wedge_bear := false
+    else if not na(wedge_point2) and na(wedge_point3) and pivot_high > wedge_point1 * 0.98
+        wedge_point3 := pivot_high
+        wedge_time3 := bar_index - 3
+        wedge_bear := true
+
+// Falling Wedge Detection (Bullish reversal)
+if enable_wedges and ta.pivotlow(3, 3)
+    pivot_low = low[3]
+    if na(wedge_point1) or pivot_low < wedge_point1
+        wedge_point1 := pivot_low
+        wedge_time1 := bar_index - 3
+        wedge_point2 := na
+        wedge_point3 := na
+        wedge_bull := false
+    else if not na(wedge_point1) and na(wedge_point2) and pivot_low < wedge_point1 * 1.01
+        wedge_point2 := pivot_low
+        wedge_time2 := bar_index - 3
+        wedge_point3 := na
+        wedge_bull := false
+    else if not na(wedge_point2) and na(wedge_point3) and pivot_low < wedge_point1 * 1.02
+        wedge_point3 := pivot_low
+        wedge_time3 := bar_index - 3
+        wedge_bull := true
+
+// Reset wedge if too old
+if not na(wedge_time1) and bar_index - wedge_time1 > 25
+    wedge_point1 := na
+    wedge_point2 := na
+    wedge_point3 := na
+    wedge_bull := false
+    wedge_bear := false
+
+// Double Top/Bottom Detection
+double_tolerance = 0.015
+// Double Top
+dt_high1 = ta.valuewhen(ta.pivothigh(4, 4), high[4], 0)
+dt_high2 = ta.valuewhen(ta.pivothigh(4, 4), high[4], 1)
+dt_time_diff = ta.barssince(ta.pivothigh(4, 4)) < 20
+double_top = enable_double_patterns and not na(dt_high1) and not na(dt_high2) and math.abs(dt_high1 - dt_high2) / dt_high1 <= double_tolerance and ta.pivothigh(4, 4) and dt_time_diff
+// Double Bottom
+db_low1 = ta.valuewhen(ta.pivotlow(4, 4), low[4], 0)
+db_low2 = ta.valuewhen(ta.pivotlow(4, 4), low[4], 1)
+db_time_diff = ta.barssince(ta.pivotlow(4, 4)) < 20
+double_bottom = enable_double_patterns and not na(db_low1) and not na(db_low2) and math.abs(db_low1 - db_low2) / db_low1 <= double_tolerance and ta.pivotlow(4, 4) and db_time_diff
+
+// =============================================================================
+// TREND CONTEXT AND MARKET STRUCTURE
+// =============================================================================
+
+trend_strength = 8
+ema_rising = ta.rising(ema20, trend_strength)
+ema_falling = ta.falling(ema20, trend_strength)
+bull_trend = ema_rising and close > ema20 and close > daily_ema
+bear_trend = ema_falling and close < ema20 and close < daily_ema
+sideways_market = not bull_trend and not bear_trend
+
+// Channel detection
+channel_period = 20
+upper_channel = ta.highest(high, channel_period)
+lower_channel = ta.lowest(low, channel_period)
+channel_height = upper_channel - lower_channel
+mid_channel = (upper_channel + lower_channel) / 2
+
+// Breakout detection
+bullish_bo = close > upper_channel[1] and bull_signal_bar
+bearish_bo = close < lower_channel[1] and bear_signal_bar
+
+// Trend exhaustion (climax bars)
+climax_threshold = 3
+var int bull_bars = 0
+var int bear_bars = 0
+bull_bars := 0
+bear_bars := 0
+for i = 0 to 5
+    if close[i] > open[i] and total_range[i] > avg_true_range_5[i]
+        bull_bars := bull_bars + 1
+    else
+        break
+for i = 0 to 5
+    if close[i] < open[i] and total_range[i] > avg_true_range_5[i]
+        bear_bars := bear_bars + 1
+    else
+        break
+bull_climax = bull_bars >= climax_threshold
+bear_climax = bear_bars >= climax_threshold
+
+// =============================================================================
+// VOLUME ANALYSIS (Bitcoin specific)
+// =============================================================================
+
+vol_sma = ta.sma(volume, 20)
+high_volume = volume > vol_sma * 1.3
+low_volume = volume < vol_sma * 0.7
+vol_confirmed = not volume_confirmation or high_volume
+
+// =============================================================================
+// PATTERN SCORING SYSTEM (AL BROOKS METHODOLOGY)
+// =============================================================================
+
+var int score = 0
+score := 0
+if bull_signal_bar
+    score := score + 2
+if bear_signal_bar
+    score := score + 2
+if bull_reversal_bar
+    score := score + 3
+if bear_reversal_bar
+    score := score + 3
+if body_percent >= 70
+    score := score + 1
+if is_large_range_bar
+    score := score + 1
+if bull_shaved or bear_shaved
+    score := score + 1
+if bull_trend and (bull_signal_bar or bull_reversal_bar)
+    score := score + 2
+if bear_trend and (bear_signal_bar or bear_reversal_bar)
+    score := score + 2
+if sideways_market and (bull_reversal_bar or bear_reversal_bar)
+    score := score + 1
+if gap_above_ema and bull_signal_bar
+    score := score + 2
+if gap_below_ema and bear_signal_bar
+    score := score + 2
+if pullback_to_ema_bull and bull_signal_bar
+    score := score + 2
+if pullback_to_ema_bear and bear_signal_bar
+    score := score + 2
+if wedge_bull and bull_reversal_bar
+    score := score + 4
+if wedge_bear and bear_reversal_bar
+    score := score + 4
+if double_bottom and bull_reversal_bar
+    score := score + 3
+if double_top and bear_reversal_bar
+    score := score + 3
+htf_bull_bias = close > daily_ema and close > weekly_ema
+htf_bear_bias = close < daily_ema and close < weekly_ema
+if htf_bull_bias and (bull_signal_bar or bull_reversal_bar)
+    score := score + 2
+if htf_bear_bias and (bear_signal_bar or bear_reversal_bar)
+    score := score + 2
+if overlap_session
+    score := score + 1
+if normal_volatility
+    score := score + 1
+if vol_confirmed
+    score := score + 1
+final_score = int(score * pattern_sensitivity * session_mult)
+
+// =============================================================================
+// ENTRY SIGNALS AND CONDITIONS
+// =============================================================================
+
+major_long = (bull_reversal_bar or (bull_signal_bar and (wedge_bull or double_bottom))) and final_score >= 6 and (not use_volatility_filter or normal_volatility) and vol_confirmed and (bull_trend or sideways_market) and above_ema
+major_short = (bear_reversal_bar or (bear_signal_bar and (wedge_bear or double_top))) and final_score >= 6 and (not use_volatility_filter or normal_volatility) and vol_confirmed and (bear_trend or sideways_market) and below_ema
+long_entry = major_long and strategy.position_size == 0
+short_entry = major_short and strategy.position_size == 0
+
+// =============================================================================
+// RISK MANAGEMENT AND POSITION SIZING
+// =============================================================================
+
+long_stop_price = bull_reversal_bar ? math.min(low, low[1]) - atr_value * 0.5 : math.min(low, low[1]) - atr_value * atr_stop_multiplier
+short_stop_price = bear_reversal_bar ? math.max(high, high[1]) + atr_value * 0.5 : math.max(high, high[1]) + atr_value * atr_stop_multiplier
+account_size = strategy.initial_capital + strategy.netprofit
+risk_amount = account_size * (max_risk_percent / 100)
+long_risk_per_share = close - long_stop_price
+short_risk_per_share = short_stop_price - close
+long_position_size = long_risk_per_share > 0 ? risk_amount / long_risk_per_share : 0
+short_position_size = short_risk_per_share > 0 ? risk_amount / short_risk_per_share : 0
+long_target_price = close + (atr_value * profit_target_atr)
+short_target_price = close - (atr_value * profit_target_atr)
+
+// =============================================================================
+// STRATEGY EXECUTION
+// =============================================================================
+
+if long_entry
+    strategy.entry("Long", strategy.long, qty=long_position_size)
+    strategy.exit("Long Exit", "Long", stop=long_stop_price, limit=long_target_price)
+if short_entry
+    strategy.entry("Short", strategy.short, qty=short_position_size)
+    strategy.exit("Short Exit", "Short", stop=short_stop_price, limit=short_target_price)
+if use_time_exits and strategy.position_size != 0
+    bars_in_trade = strategy.position_size != 0 ? ta.barssince(strategy.position_size[1] == 0) + 1 : 0
+    if bars_in_trade >= max_bars_in_trade
+        strategy.close_all(comment="Time Exit")
+if strategy.position_size > 0 and close < ema20 and close[1] >= ema20[1]
+    strategy.close("Long", comment="EMA Break")
+if strategy.position_size < 0 and close > ema20 and close[1] <= ema20[1]
+    strategy.close("Short", comment="EMA Break")
+
+// =============================================================================
+// VISUAL INDICATORS AND PLOTS
+// =============================================================================
+
+ema_color = close > ema20 ? bull_color : bear_color
+plot(ema20, "EMA 20", color=ema_color, linewidth=2)
+if show_higher_tf_ema
+    plot(daily_ema, "Daily EMA", color=color.new(color.blue, 60), linewidth=1)
+    plot(weekly_ema, "Weekly EMA", color=color.new(color.purple, 60), linewidth=1)
+plotshape(bull_reversal_bar and final_score >= 5, style=shape.triangleup, location=location.belowbar, color=bull_color, size=size.normal, title="Bull Reversal")
+plotshape(bear_reversal_bar and final_score >= 5, style=shape.triangledown, location=location.abovebar, color=bear_color, size=size.normal, title="Bear Reversal")
+plotshape(bull_signal_bar and final_score >= 5, style=shape.arrowup, location=location.belowbar, color=bull_color, size=size.small, title="Bull Signal")
+plotshape(bear_signal_bar and final_score >= 5, style=shape.arrowdown, location=location.abovebar, color=bear_color, size=size.small, title="Bear Signal")
+plotshape(inside_bar, style=shape.circle, location=location.abovebar, color=neutral_color, size=size.tiny, title="Inside Bar")
+bgcolor(gap_above_ema ? color.new(bull_color, 95) : na, title="Gap Above EMA")
+bgcolor(gap_below_ema ? color.new(bear_color, 95) : na, title="Gap Below EMA")
+if show_round_levels
+    current_1k = math.round(close / 1000) * 1000
+    current_5k = math.round(close / 5000) * 5000
+    current_10k = math.round(close / 10000) * 10000
+    hline(current_1k, "1K Level", color=color.new(color.orange, 80), linestyle=hline.style_dotted)
+    hline(current_5k, "5K Level", color=color.new(color.orange, 60), linestyle=hline.style_dashed)
+    hline(current_10k, "10K Level", color=color.new(color.orange, 40), linestyle=hline.style_solid)
+if show_pattern_labels
+    if wedge_bear and not wedge_bear[1]
+        label.new(bar_index, high, "Rising Wedge (" + str.tostring(final_score) + ")", style=label.style_label_down, color=bear_color, textcolor=color.white, size=size.normal)
+    if wedge_bull and not wedge_bull[1]
+        label.new(bar_index, low, "Falling Wedge (" + str.tostring(final_score) + ")", style=label.style_label_up, color=bull_color, textcolor=color.white, size=size.normal)
+    if double_top
+        label.new(bar_index, high, "Double Top (" + str.tostring(final_score) + ")", style=label.style_label_down, color=bear_color, textcolor=color.white, size=size.normal)
+    if double_bottom
+        label.new(bar_index, low, "Double Bottom (" + str.tostring(final_score) + ")", style=label.style_label_up, color=bull_color, textcolor=color.white, size=size.normal)
+// =============================================================================
+// INFORMATION TABLES
+// =============================================================================
+if show_score_table and barstate.islast
+    var table info_table = table.new(position.top_right, 2, 8, bgcolor=color.white, border_width=1)
+    table.cell(info_table, 0, 0, "Pattern Score", text_color=color.black, bgcolor=color.gray)
+    table.cell(info_table, 1, 0, str.tostring(final_score), text_color=color.black)
+    table.cell(info_table, 0, 1, "Market Trend", text_color=color.black)
+    trend_text = bull_trend ? "BULL" : bear_trend ? "BEAR" : "SIDEWAYS"
+    table.cell(info_table, 1, 1, trend_text, text_color=color.black)
+    table.cell(info_table, 0, 2, "Session", text_color=color.black)
+    session_text = us_session ? "US" : european_session ? "EU" : "ASIA"
+    table.cell(info_table, 1, 2, session_text, text_color=color.black)
+    table.cell(info_table, 0, 3, "Volatility %", text_color=color.black)
+    table.cell(info_table, 1, 3, str.tostring(math.round(volatility_percentile)), text_color=color.black)
+    table.cell(info_table, 0, 4, "ATR", text_color=color.black)
+    table.cell(info_table, 1, 4, str.tostring(math.round(atr_value, 2)), text_color=color.black)
+    table.cell(info_table, 0, 5, "EMA Distance", text_color=color.black)
+    ema_dist = math.round(((close - ema20) / close) * 100, 2)
+    table.cell(info_table, 1, 5, str.tostring(ema_dist) + "%", text_color=color.black)
+    table.cell(info_table, 0, 6, "Volume", text_color=color.black)
+    vol_text = high_volume ? "HIGH" : low_volume ? "LOW" : "NORMAL"
+    table.cell(info_table, 1, 6, vol_text, text_color=color.black)
+    table.cell(info_table, 0, 7, "Position", text_color=color.black)
+    pos_text = strategy.position_size > 0 ? "LONG" : strategy.position_size < 0 ? "SHORT" : "FLAT"
+    table.cell(info_table, 1, 7, pos_text, text_color=color.black)
+if show_statistics and barstate.islast
+    var table stats_table = table.new(position.top_left, 2, 6, bgcolor=color.white, border_width=1)
+    table.cell(stats_table, 0, 0, "Statistics", text_color=color.white, bgcolor=color.navy)
+    table.cell(stats_table, 1, 0, "Value", text_color=color.white, bgcolor=color.navy)
+    table.cell(stats_table, 0, 1, "Total Trades", text_color=color.black)
+    table.cell(stats_table, 1, 1, str.tostring(strategy.closedtrades), text_color=color.black)
+    table.cell(stats_table, 0, 2, "Win Rate %", text_color=color.black)
+    win_rate = strategy.closedtrades > 0 ? math.round((strategy.wintrades / strategy.closedtrades) * 100, 1) : 0
+    table.cell(stats_table, 1, 2, str.tostring(win_rate), text_color=color.black)
+    table.cell(stats_table, 0, 3, "Profit Factor", text_color=color.black)
+    profit_factor = strategy.grossloss != 0 ? math.round(strategy.grossprofit / math.abs(strategy.grossloss), 2) : 0
+    table.cell(stats_table, 1, 3, str.tostring(profit_factor), text_color=color.black)
+    table.cell(stats_table, 0, 4, "Net Profit", text_color=color.black)
+    table.cell(stats_table, 1, 4, str.tostring(math.round(strategy.netprofit)), text_color=color.black)
+    table.cell(stats_table, 0, 5, "Max DD %", text_color=color.black)
+    max_dd_pct = strategy.initial_capital > 0 ? math.round((strategy.max_drawdown / strategy.initial_capital) * 100, 2) : 0
+    table.cell(stats_table, 1, 5, str.tostring(max_dd_pct), text_color=color.black)
+// =============================================================================
+// ALERTS
+// =============================================================================
+if enable_alerts
+    if long_entry and final_score >= min_score_alert
+        alert("多头信号触发", alert.freq_once_per_bar_close)
+    if short_entry and final_score >= min_score_alert
+        alert("空头信号触发", alert.freq_once_per_bar_close) 
