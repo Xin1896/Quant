@@ -1,0 +1,160 @@
+<!--pages/index/index.wxml-->
+<view class="container">
+  <!-- 用户信息区域 -->
+  <view class="user-section" wx:if="{{!hasUserInfo}}">
+    <button 
+      wx:if="{{canIUseGetUserProfile}}" 
+      bindtap="getUserProfile" 
+      class="user-info-btn"
+    >
+      获取用户信息
+    </button>
+    <button 
+      wx:else 
+      open-type="getUserInfo" 
+      bindgetuserinfo="getUserInfo" 
+      class="user-info-btn"
+    >
+      获取用户信息
+    </button>
+  </view>
+
+  <!-- 今日黄历卡片 -->
+  <view class="lunar-card" wx:if="{{todayLunar}}">
+    <view class="card-header">
+      <text class="card-title">📅 今日黄历</text>
+      <text class="card-date">{{todayLunar.date.toLocaleDateString()}}</text>
+    </view>
+    
+    <view class="lunar-info">
+      <view class="lunar-date">
+        <text class="label">农历：</text>
+        <text class="value">{{todayLunar.lunarDate}}</text>
+      </view>
+      
+      <view class="zodiac-info">
+        <text class="label">生肖：</text>
+        <text class="value">{{todayLunar.zodiac}}</text>
+        <text class="label">星座：</text>
+        <text class="value">{{todayLunar.constellation}}</text>
+      </view>
+      
+      <view class="activities">
+        <view class="suitable">
+          <text class="label">宜：</text>
+          <text class="value">{{todayLunar.suitable.join('、')}}</text>
+        </view>
+        <view class="unsuitable">
+          <text class="label">忌：</text>
+          <text class="value">{{todayLunar.unsuitable.join('、')}}</text>
+        </view>
+      </view>
+      
+      <view class="description">
+        <text>{{todayLunar.description}}</text>
+      </view>
+      
+      <view class="festivals" wx:if="{{todayLunar.festivals.length > 0}}">
+        <text class="label">节日：</text>
+        <text class="value">{{todayLunar.festivals.join('、')}}</text>
+      </view>
+    </view>
+    
+    <view class="card-actions">
+      <button class="action-btn" bindtap="shareLunar">分享</button>
+      <button class="action-btn" bindtap="goToCalendar">查看详情</button>
+    </view>
+  </view>
+
+  <!-- 今日生日卡片 -->
+  <view class="birthday-card" wx:if="{{todayBirthdays.length > 0}}">
+    <view class="card-header">
+      <text class="card-title">🎉 今日生日</text>
+      <text class="birthday-count">{{todayBirthdays.length}}人</text>
+    </view>
+    
+    <view class="birthday-list">
+      <view 
+        class="birthday-item" 
+        wx:for="{{todayBirthdays}}" 
+        wx:key="id"
+        data-id="{{item.id}}"
+        bindtap="viewBirthday"
+      >
+        <view class="birthday-info">
+          <text class="birthday-name">{{item.name}}</text>
+          <text class="birthday-date">农历{{item.lunarMonth}}月{{item.lunarDay}}日</text>
+        </view>
+        <button 
+          class="wish-btn" 
+          data-id="{{item.id}}" 
+          bindtap="sendBirthdayWish"
+          catchtap="true"
+        >
+          发送祝福
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 即将到来的生日 -->
+  <view class="upcoming-card" wx:if="{{upcomingBirthdays.length > 0}}">
+    <view class="card-header">
+      <text class="card-title">📅 即将到来</text>
+      <text class="upcoming-count">未来7天</text>
+    </view>
+    
+    <view class="upcoming-list">
+      <view 
+        class="upcoming-item" 
+        wx:for="{{upcomingBirthdays}}" 
+        wx:key="date"
+      >
+        <view class="upcoming-date">
+          <text class="date">{{item.date.toLocaleDateString()}}</text>
+          <text class="lunar-date">{{item.lunarDate}}</text>
+        </view>
+        <view class="upcoming-birthdays">
+          <text 
+            class="birthday-name" 
+            wx:for="{{item.birthdays}}" 
+            wx:key="id" 
+            wx:for-item="birthday"
+          >
+            {{birthday.name}}
+          </text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 快速操作 -->
+  <view class="quick-actions">
+    <button class="quick-btn primary" bindtap="addBirthday">
+      <text class="btn-icon">➕</text>
+      <text class="btn-text">添加生日</text>
+    </button>
+    
+    <button class="quick-btn" bindtap="goToBirthday">
+      <text class="btn-icon">📋</text>
+      <text class="btn-text">生日管理</text>
+    </button>
+    
+    <button class="quick-btn" bindtap="goToCalendar">
+      <text class="btn-icon">📅</text>
+      <text class="btn-text">黄历详情</text>
+    </button>
+  </view>
+
+  <!-- 加载状态 -->
+  <view class="loading" wx:if="{{loading}}">
+    <text>加载中...</text>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:if="{{!loading && todayBirthdays.length === 0 && upcomingBirthdays.length === 0}}">
+    <text class="empty-icon">🎂</text>
+    <text class="empty-text">还没有生日记录</text>
+    <button class="empty-btn" bindtap="addBirthday">添加第一个生日</button>
+  </view>
+</view> 

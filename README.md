@@ -48,3 +48,5 @@ python video_to_text.py
 2. 确保已安装所有必要的依赖
 3. 视频处理时间取决于视频长度
 4. 文字识别效果取决于视频质量和文字清晰度 
+
+conda activate quant_trade

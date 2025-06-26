@@ -1,0 +1,31 @@
+{
+  "name": "wechat-birthday-bot",
+  "version": "1.0.0",
+  "description": "微信小程序生日提醒和黄历机器人",
+  "main": "app.js",
+  "scripts": {
+    "dev": "npm run dev:miniprogram",
+    "dev:miniprogram": "wechat-miniprogram-cli dev",
+    "build": "wechat-miniprogram-cli build",
+    "test": "jest"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.10",
+    "lunar-javascript": "^1.6.7",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/wechat-miniprogram": "^3.4.1",
+    "typescript": "^5.3.3",
+    "jest": "^29.7.0"
+  },
+  "keywords": [
+    "wechat",
+    "miniprogram",
+    "birthday",
+    "lunar",
+    "bot"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+} 

@@ -1,0 +1,62 @@
+//@version=5
+indicator("H1 / H2 / L1 / L2 Detector", overlay = true, max_labels_count = 200)
+
+// =============== Adjustable Parameters ===============
+emaLen     = input.int(20,  "Trend EMA Length")
+showLabel  = input.bool(true, "Show Text Label")
+minTickPct = input.float(0.0, "Min % for High/Low to Exceed Previous (0 = just > or <)")
+
+// =============== Helper Functions ===============
+isHigher(highNow, highPrev) =>
+    highNow > highPrev * (1 + minTickPct/100)
+
+isLower(lowNow, lowPrev) =>
+    lowNow  < lowPrev  * (1 - minTickPct/100)
+
+// =============== Main Trend Direction ===============
+emaVal   = ta.ema(close, emaLen)
+trendUp  = close > emaVal
+trendDn  = close < emaVal
+trendRng = not trendUp and not trendDn   // Sideways
+
+// =============== Variable Initialization ===============
+var bool haveH1 = false   // H1 appeared, waiting for H2
+var bool haveL1 = false   // L1 appeared, waiting for L2
+var string sig  = na      // Final signal for this bar
+
+// =============== Main Loop ===============
+if isHigher(high, high[1])  // Price breaks upward
+    // --------- Handle H signals ---------
+    if (trendUp or trendRng) and (high[1] <= high[2])  // Previous bar did not make new high ⇒ sideways/pullback
+        if not haveH1
+            sig     := "H1"
+            haveH1  := true      // Remember H1 appeared
+        else
+            sig     := "H2"
+            haveH1  := false     // Reset for next H1
+    // Price up → pullback ends, stop waiting for L1/L2
+    haveL1 := false
+
+else if isLower(low, low[1])    // Price breaks downward
+    // --------- Handle L signals ---------
+    if (trendDn or trendRng) and (low[1] >= low[2])    // Previous bar did not make new low
+        if not haveL1
+            sig     := "L1"
+            haveL1  := true
+        else
+            sig     := "L2"
+            haveL1  := false
+    haveH1 := false     // Reset H1/H2
+
+// =============== Plotting ===============
+if showLabel and (sig == "H1" or sig == "H2")
+    label.new(bar_index, low, sig, color = color.new(color.green, 0),
+              style = label.style_label_up, textcolor = color.white, size = size.tiny)
+if showLabel and (sig == "L1" or sig == "L2")
+    label.new(bar_index, high, sig, color = color.new(color.red, 0),
+              style = label.style_label_down, textcolor = color.white, size = size.tiny)
+
+// Optional: Delete older labels to avoid cluttering the chart
+// (max_labels_count will auto-control; for stricter control, use below)
+// if bar_index > 500
+//     label.delete(label.all[0])

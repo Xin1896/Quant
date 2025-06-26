@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>汪子豪的星球大战贪吃蛇</title>
+    <style>
+        :root {
+            --primary-color: #FFE81F;
+            --secondary-color: #00BFFF;
+            --background-color: #000000;
+            --text-color: #FFE81F;
+        }
+        
+        body {
+            background: var(--background-color);
+            color: var(--text-color);
+            font-family: 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle var(--duration) infinite;
+        }
+
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+
+        .container {
+            max-width: 500px;
+            padding: 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid var(--primary-color);
+            border-radius: 15px;
+            box-shadow: 0 0 20px var(--primary-color);
+            position: relative;
+            z-index: 1;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            text-shadow: 0 0 10px var(--primary-color);
+            font-family: 'Star Wars', Arial, sans-serif;
+            letter-spacing: 2px;
+        }
+
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            color: var(--primary-color);
+            text-shadow: 0 0 5px var(--primary-color);
+        }
+
+        #gameCanvas {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid var(--primary-color);
+            border-radius: 10px;
+            box-shadow: 0 0 15px var(--primary-color);
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            border: 2px solid var(--primary-color);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: transparent;
+            color: var(--primary-color);
+            text-shadow: 0 0 5px var(--primary-color);
+            box-shadow: 0 0 10px var(--primary-color);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            background: var(--primary-color);
+            color: black;
+            box-shadow: 0 0 20px var(--primary-color);
+        }
+
+        #restartBtn {
+            border-color: var(--secondary-color);
+            color: var(--secondary-color);
+            text-shadow: 0 0 5px var(--secondary-color);
+            box-shadow: 0 0 10px var(--secondary-color);
+        }
+
+        #restartBtn:hover {
+            background: var(--secondary-color);
+            color: black;
+        }
+
+        .difficulty-select {
+            margin: 15px 0;
+        }
+
+        select {
+            padding: 8px;
+            border-radius: 5px;
+            background: transparent;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+            box-shadow: 0 0 10px var(--primary-color);
+        }
+
+        select option {
+            background: black;
+            color: var(--primary-color);
+        }
+
+        #gameOver {
+            display: none;
+            color: #ff4444;
+            font-size: 1.5em;
+            margin: 15px 0;
+            animation: fadeIn 0.5s ease;
+            text-shadow: 0 0 10px #ff4444;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .mobile-controls {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .mobile-controls button {
+            width: 60px;
+            height: 60px;
+            margin: 5px;
+            font-size: 24px;
+        }
+
+        @media (max-width: 600px) {
+            .mobile-controls {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+                max-width: 200px;
+                margin: 20px auto;
+            }
+            
+            .mobile-controls button:nth-child(1) {
+                grid-column: 2;
+            }
+            
+            .mobile-controls button:nth-child(2) {
+                grid-column: 1;
+                grid-row: 2;
+            }
+            
+            .mobile-controls button:nth-child(3) {
+                grid-column: 2;
+                grid-row: 2;
+            }
+            
+            .mobile-controls button:nth-child(4) {
+                grid-column: 3;
+                grid-row: 2;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="stars" id="stars"></div>
+    <div class="container">
+        <h1>汪子豪的星球大战贪吃蛇</h1>
+        <div class="game-info">
+            <div id="score">分数：0</div>
+            <div id="highScore">最高分：0</div>
+        </div>
+        <div class="difficulty-select">
+            <select id="difficulty">
+                <option value="easy">简单</option>
+                <option value="medium" selected>中等</option>
+                <option value="hard">困难</option>
+            </select>
+        </div>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div id="gameOver">游戏结束！</div>
+        <div class="controls">
+            <button id="pauseBtn">暂停</button>
+            <button id="restartBtn">重新开始</button>
+        </div>
+        <div class="mobile-controls">
+            <button id="upBtn">↑</button>
+            <button id="leftBtn">←</button>
+            <button id="rightBtn">→</button>
+            <button id="downBtn">↓</button>
+        </div>
+    </div>
+
+    <script>
+        // 创建星空背景
+        function createStars() {
+            const starsContainer = document.getElementById('stars');
+            const starCount = 200;
+            
+            for (let i = 0; i < starCount; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                
+                // 随机位置
+                star.style.left = `${Math.random() * 100}%`;
+                star.style.top = `${Math.random() * 100}%`;
+                
+                // 随机大小
+                const size = Math.random() * 2;
+                star.style.width = `${size}px`;
+                star.style.height = `${size}px`;
+                
+                // 随机动画持续时间
+                star.style.setProperty('--duration', `${1 + Math.random() * 3}s`);
+                
+                starsContainer.appendChild(star);
+            }
+        }
+
+        createStars();
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const box = 20;
+        const canvasSize = 400;
+        let snake, direction, food, score, highScore, gameInterval, isGameOver, isPaused;
+        let gameSpeed = 120;
+
+        highScore = localStorage.getItem('snakeHighScore') || 0;
+        document.getElementById('highScore').textContent = '最高分：' + highScore;
+
+        function initGame() {
+            snake = [{x: 8, y: 10}, {x: 7, y: 10}, {x: 6, y: 10}];
+            direction = 'RIGHT';
+            food = randomFood();
+            score = 0;
+            isGameOver = false;
+            isPaused = false;
+            document.getElementById('score').textContent = '分数：' + score;
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('pauseBtn').textContent = '暂停';
+            clearInterval(gameInterval);
+            gameInterval = setInterval(draw, gameSpeed);
+        }
+
+        function randomFood() {
+            let newFood;
+            while (true) {
+                newFood = {
+                    x: Math.floor(Math.random() * (canvasSize / box)),
+                    y: Math.floor(Math.random() * (canvasSize / box))
+                };
+                if (!snake.some(seg => seg.x === newFood.x && seg.y === newFood.y)) break;
+            }
+            return newFood;
+        }
+
+        function draw() {
+            if (isPaused) return;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+            // 绘制网格
+            ctx.strokeStyle = 'rgba(255, 232, 31, 0.1)';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i < canvasSize; i += box) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvasSize);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvasSize, i);
+                ctx.stroke();
+            }
+
+            // 画蛇
+            snake.forEach((seg, i) => {
+                const gradient = ctx.createLinearGradient(
+                    seg.x * box,
+                    seg.y * box,
+                    (seg.x + 1) * box,
+                    (seg.y + 1) * box
+                );
+                
+                if (i === 0) {
+                    gradient.addColorStop(0, '#FFE81F');
+                    gradient.addColorStop(1, '#FFD700');
+                } else {
+                    gradient.addColorStop(0, '#00BFFF');
+                    gradient.addColorStop(1, '#1E90FF');
+                }
+                
+                ctx.fillStyle = gradient;
+                ctx.shadowColor = i === 0 ? '#FFE81F' : '#00BFFF';
+                ctx.shadowBlur = 10;
+                ctx.fillRect(seg.x * box, seg.y * box, box-2, box-2);
+                ctx.shadowBlur = 0;
+            });
+
+            // 画食物（死星）
+            ctx.fillStyle = '#FFE81F';
+            ctx.shadowColor = '#FFE81F';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(
+                food.x * box + box/2,
+                food.y * box + box/2,
+                box/2 - 2,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            
+            // 添加死星细节
+            ctx.strokeStyle = '#FFE81F';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(
+                food.x * box + box/2,
+                food.y * box + box/2,
+                box/4,
+                0,
+                Math.PI * 2
+            );
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(food.x * box + box/2 - box/4, food.y * box + box/2);
+            ctx.lineTo(food.x * box + box/2 + box/4, food.y * box + box/2);
+            ctx.moveTo(food.x * box + box/2, food.y * box + box/2 - box/4);
+            ctx.lineTo(food.x * box + box/2, food.y * box + box/2 + box/4);
+            ctx.stroke();
+
+            // 移动蛇
+            let head = {x: snake[0].x, y: snake[0].y};
+            if (direction === 'LEFT') head.x--;
+            if (direction === 'RIGHT') head.x++;
+            if (direction === 'UP') head.y--;
+            if (direction === 'DOWN') head.y++;
+
+            // 检查碰撞
+            if (head.x < 0 || head.x >= canvasSize/box || 
+                head.y < 0 || head.y >= canvasSize/box || 
+                snake.some(seg => seg.x === head.x && seg.y === head.y)) {
+                gameOver();
+                return;
+            }
+
+            snake.unshift(head);
+
+            // 吃到食物
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                document.getElementById('score').textContent = '分数：' + score;
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('snakeHighScore', highScore);
+                    document.getElementById('highScore').textContent = '最高分：' + highScore;
+                }
+                food = randomFood();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function gameOver() {
+            clearInterval(gameInterval);
+            isGameOver = true;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            document.getElementById('pauseBtn').textContent = isPaused ? '继续' : '暂停';
+        }
+
+        // 键盘控制
+        document.addEventListener('keydown', function(e) {
+            if (isGameOver) return;
+            if (e.key === 'ArrowLeft' && direction !== 'RIGHT') direction = 'LEFT';
+            if (e.key === 'ArrowUp' && direction !== 'DOWN') direction = 'UP';
+            if (e.key === 'ArrowRight' && direction !== 'LEFT') direction = 'RIGHT';
+            if (e.key === 'ArrowDown' && direction !== 'UP') direction = 'DOWN';
+            if (e.key === ' ') togglePause();
+        });
+
+        // 移动端控制
+        document.getElementById('upBtn').onclick = () => { if (direction !== 'DOWN') direction = 'UP'; };
+        document.getElementById('leftBtn').onclick = () => { if (direction !== 'RIGHT') direction = 'LEFT'; };
+        document.getElementById('rightBtn').onclick = () => { if (direction !== 'LEFT') direction = 'RIGHT'; };
+        document.getElementById('downBtn').onclick = () => { if (direction !== 'UP') direction = 'DOWN'; };
+
+        // 难度选择
+        document.getElementById('difficulty').addEventListener('change', function(e) {
+            switch(e.target.value) {
+                case 'easy':
+                    gameSpeed = 150;
+                    break;
+                case 'medium':
+                    gameSpeed = 120;
+                    break;
+                case 'hard':
+                    gameSpeed = 90;
+                    break;
+            }
+            if (!isGameOver) {
+                clearInterval(gameInterval);
+                gameInterval = setInterval(draw, gameSpeed);
+            }
+        });
+
+        document.getElementById('pauseBtn').onclick = togglePause;
+        document.getElementById('restartBtn').onclick = initGame;
+
+        // 启动游戏
+        initGame();
+    </script>
+</body>
+</html> 
